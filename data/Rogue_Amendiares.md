@@ -1,3 +1,12 @@
+---
+
+**Sub-Pages:**
+
+* **Main**
+* Gallery
+
+---
+
 ## Rogue Amendiares
 
 * Video Game

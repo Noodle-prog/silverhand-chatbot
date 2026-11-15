@@ -1,3 +1,14 @@
+---
+
+**Sub-Pages:**
+
+* **Main**
+* Computers
+* Netpage
+* Gallery
+
+---
+
 ## Kerry Eurodyne
 
 * Video Game
