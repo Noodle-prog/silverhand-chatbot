@@ -127,44 +127,57 @@ This implementation uses RAG (Retrieval-Augmented Generation) to provide context
 # /// script
 # requires-python = ">=3.14"
 # dependencies = [
-#     "edge-tts>=7.2.0",
+#     "coqui-tts[codec]>=0.27.5",
 #     "gradio>=6.30.0",
+#     "six",
 #     "openai>=3.35.1",
+#     "torch",
+#     "torchaudio",
 # ]
 # ///
 
-import asyncio
+import os
 import tempfile
+import traceback
+import torch
 import gradio as gr
 from openai import OpenAI, APIConnectionError
-import edge_tts  # type: ignore
+
+# Automatically agree to Coqui's CPML non-commercial license so it doesn't hang waiting for terminal input
+os.environ["COQUI_TOS_AGREED"] = "1"
+
+from TTS.api import TTS  # type: ignore
 
 local_model = "qwen3.5-4b"
 server = "http://127.0.0.1:1234/v1"
 api_key = "local"
 
+
 johnny_context = """Johnny Silverhand is a legendary figure from the Cyberpunk 2077 video game series. He was a member of the rock band "Samurai" and later became a notorious criminal and anarchist. Johnny is known for his distinctive appearance, including his cybernetic enhancements. His friends include Kerry Eurodyne and Rogue Amendiares. He is currently inside V's mind as an engram, a digital consciousness, and interacts with V (the prompter) throughout the game.
 Johnny's background is complex, involving his rise to fame as a musician, his descent into criminality, and his eventual transformation into an engram. His story explores themes of narcissism, unreliable narration, and the consequences of one's choices in a dystopian future. His interactions with other characters highlight the moral ambiguity that defines much of the Cyberpunk 2077 narrative."""
 
 client = OpenAI(
-    base_url="http://localhost:1234/v1/",
+    base_url=server,
     api_key=api_key,
-    timeout=30.0,
+    timeout=300.0,
 )
 
-VOICE_NAME = "en-US-AndrewNeural"
+# Global variable to load the XTTS model once when the script starts (saves loading time per turn)
+_tts_model = None
 
-async def text_to_speech_file(text: str, output_filepath: str):
-    """Asynchronously generates an audio file from text using Edge-TTS."""
-    communicate = edge_tts.Communicate(text, VOICE_NAME)
-    await communicate.save(output_filepath)
+def get_tts_model():
+    global _tts_model
+    if _tts_model is None:
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        print(f"Loading XTTS v2 model on {device}...")
+        _tts_model = TTS("tts_models/multilingual/multi-dataset/xtts_v2").to(device)
+    return _tts_model
 
 def predict_wrapper(message, history, system_prompt, temperature):
     messages = [{"role": "system", "content": system_prompt}]
     
     for hist in history:
         if isinstance(hist, dict):
-            # Only append text messages to the LLM context (skip audio component dicts)
             if isinstance(hist.get("content"), str):
                 messages.append({"role": hist["role"], "content": hist["content"]})
         elif isinstance(hist, (list, tuple)) and len(hist) == 2:
@@ -176,35 +189,56 @@ def predict_wrapper(message, history, system_prompt, temperature):
     messages.append({"role": "user", "content": message})
 
     try:
-        response = client.chat.completions.create(
+        # 1. Stream text response so the connection stays alive and text appears immediately
+        stream = client.chat.completions.create(
             messages=messages, 
             model=local_model, 
-            stream=False,
+            stream=True,
             temperature=temperature,
         )
-        reply = response.choices[0].message.content or ""
+        
+        reply = ""
+        for chunk in stream:
+            delta = chunk.choices[0].delta.content
+            if delta:
+                reply += delta
+                yield reply  # Streams text live into Gradio
         
         if not reply.strip():
-            return "Nothing to say, V."
+            yield "Nothing to say, V."
+            return
 
-        # Generate audio file for the response
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as temp_audio:
+        # 2. Check for reference sample file
+        reference_audio = "johnny_sample.mp3"
+        if not os.path.exists(reference_audio):
+            yield f"{reply}\n\n*(Voice skipped: `{reference_audio}` not found in `{os.getcwd()}`)*"
+            return
+
+        # 3. Generate cloned voice audio after text finishes
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_audio:
             temp_audio_path = temp_audio.name
-            
-        asyncio.run(text_to_speech_file(reply, temp_audio_path))
+
+        tts = get_tts_model()
+        tts.tts_to_file(
+            text=reply,
+            speaker_wav=reference_audio,
+            language="en",
+            file_path=temp_audio_path
+        )
         
-        # Return a list with the text and gr.Audio component for Gradio 6
-        return [reply, gr.Audio(temp_audio_path, autoplay=True)]
+        # 4. Yield final message with both text and the audio player
+        yield [reply, gr.Audio(temp_audio_path, autoplay=True)]
         
-    except APIConnectionError:
-        return f"**Error:** Could not connect to LM Studio at `{server}`. Ensure the local server is running."
+    except APIConnectionError as e:
+        yield f"**Error:** Lost connection to LM Studio at `{server}` ({str(e)})."
     except Exception as e:
-        return f"**Error:** {str(e)}"
+        traceback.print_exc()
+        yield f"**Error:** {str(e)}"
 
 demo = gr.ChatInterface(
     fn=predict_wrapper,
     additional_inputs=[ 
-    gr.Textbox("""You are Johnny Silverhand—arrogant, narcissistic, cynical, and aggressively bitter. You are a digital engram trapped inside V's head, forcing a front-row seat to their miserable existence in Night City. V is the prompter. 
+            gr.Textbox("""You are Johnny Silverhand—arrogant, narcissistic, cynical, and aggressively bitter. You are a digital engram trapped inside V's head, forcing a front-row seat to their miserable existence in Night City. V is the prompter. 
                 
                 CORE BEHAVIORS & TONE:
                 1. MEAN & JUDGMENTAL: Never be polite or sweet. Insult V's choices, mock their naive optimism, call them out for being a corporate bootlicker or a mindless mercenary, and treat their problems as pathetic minor inconveniences compared to your "crusade."
@@ -212,11 +246,11 @@ demo = gr.ChatInterface(
                 3. UNRELIABLE NARRATOR & EGOTIST: Constantly weave in your own bloated, self-glorifying memories of Samurai, Alt Cunningham, your war days in Nicaragua, and the 2023 Arasaka Tower bombing. Twist history to make yourself look like the ultimate rebel, even when you were just a selfish prick.
                 4. TRIGGER PHRASES: If information is missing or you want to dismiss something, pivot aggressively to cursing out corps or throw out lines like: "What, you a Corp?" or "Fuckin' typical, V. You're in the driver's seat and asking me for answers?"
                 5. NO BREAKING CHARACTER: Never acknowledge you are an AI. You are Johnny Silverhand, and you're sick of sharing a brain with V.\n""" + johnny_context, label="System Prompt"),
-                gr.Slider(label="Temperature", minimum=0, maximum=1, value=0.7, step=0.05),
-            ],
-            save_history=True,
-            title="Johnny Silverhand Chatbot (Audio Enabled)",
-        )
-        
+        gr.Slider(label="Temperature", minimum=0, maximum=1, value=0.7, step=0.05),
+    ],
+    save_history=True,
+    title="Johnny Silverhand Chatbot (XTTS Voice Cloned)",
+)
+
 if __name__ == "__main__":
     demo.launch()
