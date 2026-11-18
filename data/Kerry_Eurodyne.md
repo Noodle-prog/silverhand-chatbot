@@ -130,14 +130,13 @@ Music always gets hammered down to the Three A's. Axe, Attitude, and Audience. M
   + 2.3 Concept Songs
 * 3 Game Information (2077)
   + 3.1 Database Entry
-  + 3.2 Clothes
-  + 3.3 Miscellaneous
-  + 3.4 Shards
-  + 3.5 Kerry's netsite
-  + 3.6 Official Art Book Description
-  + 3.7 Complete Official Guide - Collector's Edition
-    - 3.7.1 Description
-    - 3.7.2 Critic reviews
+  + 3.2 Miscellaneous
+  + 3.3 Shards
+  + 3.4 Kerry's netsite
+  + 3.5 Official Art Book Description
+  + 3.6 Complete Official Guide - Collector's Edition
+    - 3.6.1 Description
+    - 3.6.2 Critic reviews
 * 4 Associated quests
   + 4.1 Main Jobs
   + 4.2 Side Jobs
@@ -161,7 +160,7 @@ Midway through the century, Kerry's life had taken an, most would say, unexpecte
 
 ### 2077[]
 
-Quote does not contain text.
+Free to sing until you're blue in the face, nobody hearin' a thing? It's just another kind of cage.
 
  — Kerry Eurodyne, *Cyberpunk 2077*
 
@@ -281,11 +280,6 @@ KERRY EURODYNE
 ---
 
 A devilishly talented musician, incorrigible rebel, celebrity, and rockerboy from Night City. People say different things about Kerry, but there's no doubt he's America's God of rock. In the old days, he strummed next to Johnny Silverhand in the cult rock band Samurai. When the two drifted apart, Eurodyne kickstarted a solo career which, in spite of its ups and downs, is still going strong. Kerry's proud of his Filipino roots, though for someone of his fame, he's especially private about his personal life. For all its numerous flaws, he's made Night City his own – his most faithful muse.[6]
-
-### Clothes[]
-
-* Second Conflict flight jacket
-* SECOND CONFLICT biker jacket
 
 ### Miscellaneous[]
 
